@@ -66,11 +66,15 @@ async function getAIReply(userMessage) {
 function sendMessage(senderId, text) {
   return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: senderId }, message: { text: text } }) });
 }
-function sendImage(senderId, imageUrl) {
-  return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: senderId }, message: { attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } } } }) });
-}
-async function sendMultipleImages(senderId, images) {
-  for (const url of images) { await sendImage(senderId, url); await new Promise(r => setTimeout(r, 500)); }
+async function sendImage(senderId, imageUrl) {
+  const res = await fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipient: { id: senderId }, message: { attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } } } })
+  });
+  const data = await res.json();
+  console.log("SendImage result:", JSON.stringify(data));
+  return data;
 }
 
 app.get('/', (req, res) => res.send('Bot ทำงานอยู่ครับ'));
