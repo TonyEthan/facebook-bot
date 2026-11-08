@@ -87,6 +87,11 @@ async function sendMultipleImages(senderId, images) {
 
 app.get('/', (req, res) => res.send('Bot ทำงานอยู่ครับ'));
 
+// หน้า Privacy Policy สำหรับ Meta
+app.get('/privacy', (req, res) => {
+  res.send(`<h1>Privacy Policy - เรื่องเล่าเตือนใจ</h1><p>แอพนี้ใช้สำหรับตอบข้อความลูกค้าในเพจ 【entity-Facebook¦canonical_name=Facebook】 เท่านั้น ไม่มีการเก็บข้อมูลส่วนตัวอื่นใดนอกเหนือจากข้อความที่ลูกค้าส่งมาเพื่อตอบกลับ และจะไม่นำข้อมูลไปขายหรือแชร์ให้บุคคลที่สาม</p><p>ติดต่อ: เพจ เรื่องเล่าเตือนใจ บน 【entity-Facebook¦canonical_name=Facebook】</p>`);
+});
+
 app.get('/webhook', (req, res) => {
   if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
     res.send(req.query['hub.challenge']);
