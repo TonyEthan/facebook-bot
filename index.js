@@ -60,14 +60,12 @@ function makeImageList(prefix, count) {
   return list;
 }
 const IMAGES_CHUDNON = makeImageList('chudnon', 17);
-const IMAGES_DRESS = makeImageList('dress', 22);
+const IMAGES_DRESS = makeImageList('dress', 23);
 const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/dressmix.jpg'];
 const IMAGES_KRAJOM = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/krajom1.jpg'];
 const IMAGES_REVIEW = makeImageList('review', 4);
 
-// กลุ่มที่ 1 ส่งทีละ 4 รูป: chudnon1-17 + dress1-22 = 39 รูป
 const GROUP_BATCH4 = [...IMAGES_CHUDNON, ...IMAGES_DRESS];
-// กลุ่มที่ 2 ส่งทีละ 1 รูป: dressmix, krajom1, review1-4 = 6 รูป
 const GROUP_SINGLE = [...IMAGES_DRESSMIX, ...IMAGES_KRAJOM, ...IMAGES_REVIEW];
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -98,19 +96,17 @@ async function sendImage(senderId, imageUrl) {
   } catch (e) { console.log("SendImage error:", e.message); return null; }
 }
 
-// ส่งทีละ 4 รูป
 async function sendImagesBatch4(senderId, images) {
   for (let i = 0; i < images.length; i += 4) {
     const batch = images.slice(i, i + 4);
     for (const url of batch) {
       await sendImage(senderId, url);
-      await delay(200); // ในชุดเดียวกันส่งติดๆ กัน จะได้ขึ้นเป็นกลุ่ม 4 รูป
+      await delay(200);
     }
-    await delay(800); // พักระหว่างชุดนิดนึง
+    await delay(800);
   }
 }
 
-// ส่งทีละ 1 รูป
 async function sendImagesSingle(senderId, images) {
   for (const url of images) {
     await sendImage(senderId, url);
