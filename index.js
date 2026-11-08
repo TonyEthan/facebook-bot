@@ -31,7 +31,6 @@ const SHOP_INFO = `
 ห้ามลดราคาเอง ห้ามแต่งโปรเอง ตอบตามราคาข้างบนเท่านั้น
 `;
 
-// ===== สร้างลิงก์รูปตามลำดับที่คุณต้องการ =====
 function makeImageList(prefix, count) {
   const list = [];
   for (let i = 1; i <= count; i++) {
@@ -39,93 +38,73 @@ function makeImageList(prefix, count) {
   }
   return list;
 }
-
 const IMAGES_CHUDNON = makeImageList('chudnon', 17);
 const IMAGES_DRESS = makeImageList('dress', 22);
 const IMAGES_REVIEW = makeImageList('review', 4);
 const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/dressmix.jpg'];
 const IMAGES_KRAJOM = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/krajom1.jpg'];
+const processedMids = new Set();
 
 async function getAIReply(userMessage) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: SHOP_INFO + "\n\nลูกค้าพิมพ์มา: " + userMessage }] }]
-      })
+      body: JSON.stringify({ contents: [{ parts: [{ text: SHOP_INFO + "\n\nลูกค้าพิมพ์มา: " + userMessage }] }] })
     });
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "ขอโทษนะคะ แอดมินติดธุระนิดหน่อย พิมพ์ 'ติดต่อ' ไว้ได้เลยนะคะ";
+    if (data.error) {
+      console.log("Gemini API error:", JSON.stringify(data.error));
+      return "สวัสดีค่ะ ชุดนอนแขนระบายชุดละ 69 บาทนะคะ 2 ชุด 188 บาทรวมส่ง 4 ชุด 276 บาทส่งฟรีค่ะ รับกี่ชุดดีคะ?";
+    }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "สวัสดีค่ะ รับชุดนอนกี่ชุดดีคะ? ชุดละ 69 บาท 4 ชุดส่งฟรีค่ะ";
   } catch (e) {
-    return "ขอโทษนะคะ ระบบขัดข้องนิดหน่อย ลองพิมพ์ใหม่อีกครั้งนะคะ";
+    console.log("Gemini error:", e);
+    return "สวัสดีค่ะ ชุดนอนแขนระบายชุดละ 69 บาทนะคะ 2 ชุด 188 บาทรวมส่ง 4 ชุด 276 บาทส่งฟรีค่ะ รับกี่ชุดดีคะ?";
   }
 }
-
 function sendMessage(senderId, text) {
-  return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient: { id: senderId }, message: { text: text } })
-  });
+  return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: senderId }, message: { text: text } }) });
 }
-
 function sendImage(senderId, imageUrl) {
-  return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipient: { id: senderId }, message: { attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } } } })
-  });
+  return fetch(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recipient: { id: senderId }, message: { attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } } } }) });
 }
-
 async function sendMultipleImages(senderId, images) {
-  for (const url of images) {
-    await sendImage(senderId, url);
-    await new Promise(r => setTimeout(r, 500));
-  }
+  for (const url of images) { await sendImage(senderId, url); await new Promise(r => setTimeout(r, 500)); }
 }
 
 app.get('/', (req, res) => res.send('Bot ทำงานอยู่ครับ'));
-
-// หน้า Privacy Policy สำหรับ Meta
 app.get('/privacy', (req, res) => {
-  res.send(`<h1>Privacy Policy - เรื่องเล่าเตือนใจ</h1><p>แอพนี้ใช้สำหรับตอบข้อความลูกค้าในเพจ 【entity-Facebook¦canonical_name=Facebook】 เท่านั้น ไม่มีการเก็บข้อมูลส่วนตัวอื่นใดนอกเหนือจากข้อความที่ลูกค้าส่งมาเพื่อตอบกลับ และจะไม่นำข้อมูลไปขายหรือแชร์ให้บุคคลที่สาม</p><p>ติดต่อ: เพจ เรื่องเล่าเตือนใจ บน 【entity-Facebook¦canonical_name=Facebook】</p>`);
+  res.send(`<h1>Privacy Policy - เรื่องเล่าเตือนใจ</h1><p>แอพนี้ใช้สำหรับตอบข้อความลูกค้าในเพจ Facebook เท่านั้น ไม่มีการเก็บข้อมูลส่วนตัวอื่นใดนอกเหนือจากข้อความที่ลูกค้าส่งมาเพื่อตอบกลับ และจะไม่นำข้อมูลไปขายหรือแชร์ให้บุคคลที่สาม</p><p>ติดต่อ: เพจ เรื่องเล่าเตือนใจ บน Facebook</p>`);
 });
-
 app.get('/webhook', (req, res) => {
-  if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
-    res.send(req.query['hub.challenge']);
-  } else { res.sendStatus(403); }
+  if (req.query['hub.verify_token'] === VERIFY_TOKEN) res.send(req.query['hub.challenge']);
+  else res.sendStatus(403);
 });
-
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', (req, res) => {
+  res.sendStatus(200);
   const body = req.body;
-  if (body.object === 'page') {
+  if (body.object !== 'page') return;
+  (async () => {
     for (const entry of body.entry) {
       const event = entry.messaging[0];
+      if (!event.message || !event.message.text) continue;
+      if (event.message.is_echo) continue;
+      const mid = event.message.mid;
+      if (processedMids.has(mid)) continue;
+      processedMids.add(mid);
+      if (processedMids.size > 500) processedMids.clear();
       const senderId = event.sender.id;
-      if (event.message && event.message.text) {
-        const msg = event.message.text.toLowerCase();
-
-        if (msg.includes('รีวิว')) {
-          await sendMultipleImages(senderId, IMAGES_REVIEW);
-        } else if (msg.includes('กระโจม')) {
-          await sendMultipleImages(senderId, IMAGES_KRAJOM);
-        } else if (msg.includes('คละ') || msg.includes('mix')) {
-          await sendMultipleImages(senderId, IMAGES_DRESSMIX);
-        } else if (msg.includes('เดรส') || msg.includes('คอกลม')) {
-          await sendMultipleImages(senderId, IMAGES_DRESS);
-        } else if (msg.includes('ชุดนอน') || msg.includes('สินค้า') || msg.includes('ราคา') || msg.includes('ดูรูป')) {
-          await sendMultipleImages(senderId, IMAGES_CHUDNON);
-        }
-
-        const aiReply = await getAIReply(event.message.text);
-        await sendMessage(senderId, aiReply);
-      }
+      const msg = event.message.text.toLowerCase();
+      if (msg.includes('รีวิว')) await sendMultipleImages(senderId, IMAGES_REVIEW);
+      else if (msg.includes('กระโจม')) await sendMultipleImages(senderId, IMAGES_KRAJOM);
+      else if (msg.includes('คละ') || msg.includes('mix')) await sendMultipleImages(senderId, IMAGES_DRESSMIX);
+      else if (msg.includes('เดรส') || msg.includes('คอกลม')) await sendMultipleImages(senderId, IMAGES_DRESS);
+      else if (msg.includes('ชุดนอน') || msg.includes('สินค้า') || msg.includes('ราคา') || msg.includes('ดูรูป')) await sendMultipleImages(senderId, IMAGES_CHUDNON);
+      const aiReply = await getAIReply(event.message.text);
+      await sendMessage(senderId, aiReply);
     }
-    res.sendStatus(200);
-  } else { res.sendStatus(404); }
+  })();
 });
-
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log('Bot running on port ' + PORT));
