@@ -34,7 +34,7 @@ const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
 const SHOP_INFO = `
 คุณคือแอดมินเพจ "เรื่องเล่าเตือนใจ" ตอบสุภาพมาก ใช้คำลงท้าย ค่ะ / นะคะ / จ้ะ เป็นกันเองเหมือนพี่สาวใจดี
-ลูกค้าเพิ่งได้รับข้อความต้อนรับ + รูปสินค้าทั้งหมดไปแล้ว ตอนนี้คือการคุยต่อ
+ลูกค้าเพิ่งได้รับรูป + ข้อความต้อนรับไปแล้ว ตอนนี้คือการคุยต่อ
 สินค้าหลัก: ชุดนอนแขนระบาย ผ้านิ่มใส่สบาย สีไม่ตก มีกระเป๋า 2 ข้าง ใส่ของได้จริง อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ความยาว 42 นิ้ว
 ราคาชุดนอนแขนระบาย ชุดละ 69 บาท
 - 2 ชุด = 138 + ค่าส่ง 50 = 188 บาท
@@ -65,7 +65,9 @@ const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-b
 const IMAGES_KRAJOM = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/krajom1.jpg'];
 const IMAGES_REVIEW = makeImageList('review', 4);
 
+// กลุ่มที่ 1: chudnon1 ถึง dress23 = 40 รูป ส่งทีละ 4 รูปพร้อมกัน
 const GROUP_BATCH4 = [...IMAGES_CHUDNON, ...IMAGES_DRESS];
+// กลุ่มที่ 2: ส่งทีละรูป
 const GROUP_SINGLE = [...IMAGES_DRESSMIX, ...IMAGES_KRAJOM, ...IMAGES_REVIEW];
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -96,21 +98,20 @@ async function sendImage(senderId, imageUrl) {
   } catch (e) { console.log("SendImage error:", e.message); return null; }
 }
 
+// ส่งทีละ 4 รูปพร้อมกัน - ใช้ Promise.all จะได้ขึ้นเป็นกลุ่ม 4 รูป
 async function sendImagesBatch4(senderId, images) {
   for (let i = 0; i < images.length; i += 4) {
     const batch = images.slice(i, i + 4);
-    for (const url of batch) {
-      await sendImage(senderId, url);
-      await delay(200);
-    }
-    await delay(800);
+    await Promise.all(batch.map(url => sendImage(senderId, url)));
+    await delay(1000);
   }
 }
 
+// ส่งทีละ 1 รูป
 async function sendImagesSingle(senderId, images) {
   for (const url of images) {
     await sendImage(senderId, url);
-    await delay(500);
+    await delay(600);
   }
 }
 
@@ -182,8 +183,9 @@ async function handleEvent(event) {
 
     if (isFirst) {
       userState.set(senderId, { lastTime: now });
-      await sendMessage(senderId, MSG1);
+      // ลำดับตามที่ต้องการ: รูปก่อน แล้วข้อความ 1,2,3
       await sendAllImages(senderId);
+      await sendMessage(senderId, MSG1);
       await sendMessage(senderId, MSG2);
       await sendMessage(senderId, MSG3);
       return;
