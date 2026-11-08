@@ -8,10 +8,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 10000;
 
 const processedMids = new Set();
-// จำว่าใครทักมาแล้วบ้าง จะได้ไม่ส่งข้อความต้อนรับซ้ำ
-const userState = new Map(); // senderId -> { lastTime: number }
+const userState = new Map();
 
-// ===== ข้อความตอนลูกค้าทักครั้งแรก =====
 const MSG1 = `ชุดนอนแขนระบาย ✅
 ผ้านิ่มใส่สบาย สีไม่ตก 
 
@@ -34,7 +32,6 @@ const MSG2 = `คละรวมกันได้นะจ้ะ❤❤
 
 const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
-// ===== ข้อมูลร้านให้ Gemini ใช้ตอบต่อ =====
 const SHOP_INFO = `
 คุณคือแอดมินเพจ "เรื่องเล่าเตือนใจ" ตอบสุภาพมาก ใช้คำลงท้าย ค่ะ / นะคะ / จ้ะ เป็นกันเองเหมือนพี่สาวใจดี
 ลูกค้าเพิ่งได้รับข้อความต้อนรับ + รูปสินค้าทั้งหมดไปแล้ว ตอนนี้คือการคุยต่อ
@@ -55,7 +52,6 @@ const SHOP_INFO = `
 ตอบสั้น กระชับ เป็นกันเอง
 `;
 
-// ===== รูป =====
 function makeImageList(prefix, count) {
   const list = [];
   for (let i = 1; i <= count; i++) {
@@ -68,7 +64,11 @@ const IMAGES_DRESS = makeImageList('dress', 22);
 const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/dressmix.jpg'];
 const IMAGES_KRAJOM = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/krajom1.jpg'];
 const IMAGES_REVIEW = makeImageList('review', 4);
-const ALL_IMAGES = [...IMAGES_CHUDNON, ...IMAGES_DRESS, ...IMAGES_DRESSMIX, ...IMAGES_KRAJOM, ...IMAGES_REVIEW];
+
+// กลุ่มที่ 1 ส่งทีละ 4 รูป: chudnon1-17 + dress1-22 = 39 รูป
+const GROUP_BATCH4 = [...IMAGES_CHUDNON, ...IMAGES_DRESS];
+// กลุ่มที่ 2 ส่งทีละ 1 รูป: dressmix, krajom1, review1-4 = 6 รูป
+const GROUP_SINGLE = [...IMAGES_DRESSMIX, ...IMAGES_KRAJOM, ...IMAGES_REVIEW];
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -98,11 +98,29 @@ async function sendImage(senderId, imageUrl) {
   } catch (e) { console.log("SendImage error:", e.message); return null; }
 }
 
-async function sendMultipleImages(senderId, images) {
-  for (const url of images) {
-    try { await sendImage(senderId, url); await delay(300); }
-    catch (e) { console.log("sendMultipleImages error:", e.message); }
+// ส่งทีละ 4 รูป
+async function sendImagesBatch4(senderId, images) {
+  for (let i = 0; i < images.length; i += 4) {
+    const batch = images.slice(i, i + 4);
+    for (const url of batch) {
+      await sendImage(senderId, url);
+      await delay(200); // ในชุดเดียวกันส่งติดๆ กัน จะได้ขึ้นเป็นกลุ่ม 4 รูป
+    }
+    await delay(800); // พักระหว่างชุดนิดนึง
   }
+}
+
+// ส่งทีละ 1 รูป
+async function sendImagesSingle(senderId, images) {
+  for (const url of images) {
+    await sendImage(senderId, url);
+    await delay(500);
+  }
+}
+
+async function sendAllImages(senderId) {
+  await sendImagesBatch4(senderId, GROUP_BATCH4);
+  await sendImagesSingle(senderId, GROUP_SINGLE);
 }
 
 async function getAIReply(userMsg) {
@@ -164,33 +182,27 @@ async function handleEvent(event) {
   try {
     const now = Date.now();
     const last = userState.get(senderId);
-    // ถ้ายังไม่เคยทัก หรือห่างกันเกิน 1 ชม. = ถือว่าทักใหม่ ส่งข้อความต้อนรับ
     const isFirst = !last || (now - last.lastTime > 60 * 60 * 1000);
 
     if (isFirst) {
       userState.set(senderId, { lastTime: now });
       await sendMessage(senderId, MSG1);
-      await sendMultipleImages(senderId, ALL_IMAGES);
+      await sendAllImages(senderId);
       await sendMessage(senderId, MSG2);
       await sendMessage(senderId, MSG3);
       return;
     }
 
-    // ===== คุยต่อครั้งที่ 2 ขึ้นไป ใช้ Gemini =====
     userState.set(senderId, { lastTime: now });
     const lower = msg.toLowerCase();
-
-    // ถ้าลูกค้าขอดูรูปอีก ส่งรูปให้ด้วย
     if (lower.includes('รูป') || lower.includes('ดู') || lower.includes('ลาย') || lower.includes('สี')) {
-      await sendMultipleImages(senderId, ALL_IMAGES);
+      await sendAllImages(senderId);
     }
-
     let reply = await getAIReply(msg);
     if (!reply) {
       reply = "รับกี่ชุดดีจ้ะ😘 บอกแอดมินได้เลยนะคะ ชื่อ เบอร์โทร ที่อยู่จัดส่ง เดี๋ยวแอดมินเช็คให้ค่ะ";
     }
     await sendMessage(senderId, reply);
-
   } catch (e) {
     console.log("handleEvent error:", e.message);
   }
