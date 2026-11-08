@@ -38,7 +38,7 @@ function makeImageList(prefix, count) {
   }
   return list;
 }
-const IMAGES_CHUDNON = makeImageList('chudnon', 17);
+const IMAGES_CHUDNON = ['https://picsum.photos/800/600'];
 const IMAGES_DRESS = makeImageList('dress', 22);
 const IMAGES_REVIEW = makeImageList('review', 4);
 const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/dressmix.jpg'];
