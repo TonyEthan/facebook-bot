@@ -6,8 +6,42 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
 const PORT = process.env.PORT || 10000;
 
+// ===== Upstash Redis - จำลูกค้า 1 ชม. แม้ Render Restart =====
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
 const processedMids = new Set();
-const welcomedUsers = new Map();
+const welcomedUsers = new Map(); // สำรองไว้ถ้า Upstash ยังไม่ตั้งค่า
+
+async function hasWelcomed(senderId) {
+  // ถ้ายังไม่มี Upstash ใช้ Map เดิมไปก่อน
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+    return welcomedUsers.has(senderId);
+  }
+  try {
+    const res = await fetch(`${UPSTASH_URL}/get/welcomed:${senderId}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+    });
+    const data = await res.json();
+    return !!data.result;
+  } catch (e) {
+    console.log("Upstash get error:", e.message);
+    return welcomedUsers.has(senderId);
+  }
+}
+
+async function markWelcomed(senderId) {
+  welcomedUsers.set(senderId, Date.now());
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+  try {
+    // จำไว้ 3600 วินาที = 1 ชม. ครบ 1 ชม. มันจะลบเองอัตโนมัติ
+    await fetch(`${UPSTASH_URL}/set/welcomed:${senderId}/1/EX/3600`, {
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+    });
+  } catch (e) {
+    console.log("Upstash set error:", e.message);
+  }
+}
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
 ผ้านิ่มใส่สบาย สีไม่ตก 
@@ -31,7 +65,7 @@ const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
 const BASE_URL = 'https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/';
 
-// ===== รหัสใหม่ 45 รูป ส่งทีละ 4 รูป เรียงตามที่พี่ให้มา =====
+// ===== รหัสใหม่ 45 รูป ส่งทีละ 4 รูป =====
 const CODES_BATCH4 = [
   'a09','a11','a29','a77','a79','a83','a85','a87','a90','a97',
   'a105','a107','a109','a111','a113','a115','a117','a119',
@@ -72,7 +106,6 @@ async function sendImage(senderId, imageUrl) {
   } catch (e) { console.log("SendImage error:", e.message); return null; }
 }
 
-// ส่งทีละ 4 รูปพร้อมกัน
 async function sendImagesBatch4(senderId, images) {
   for (let i = 0; i < images.length; i += 4) {
     const batch = images.slice(i, i + 4);
@@ -81,7 +114,6 @@ async function sendImagesBatch4(senderId, images) {
   }
 }
 
-// ส่งทีละ 1 รูป
 async function sendImagesSingle(senderId, images) {
   for (const url of images) {
     await sendImage(senderId, url);
@@ -134,18 +166,14 @@ async function handleEvent(event) {
   console.log("Received:", msg || "[ส่งรูปมา]");
 
   try {
-    const now = Date.now();
-    const last = welcomedUsers.get(senderId);
-
-    // นับจากแชทสุดท้ายของลูกค้า ถ้ายังไม่เกิน 1 ชม. = ไม่ส่งซ้ำ ให้แอดมินตอบเอง
-    if (last && (now - last < 60 * 60 * 1000)) {
-      welcomedUsers.set(senderId, now);
-      console.log("Already welcomed, skip - let admin reply");
+    // เช็คจาก Upstash ว่าเคยทักภายใน 1 ชม. ไหม
+    const already = await hasWelcomed(senderId);
+    if (already) {
+      console.log("Already welcomed in last 1h (Upstash), skip - let admin reply");
       return;
     }
 
-    welcomedUsers.set(senderId, now);
-    // ลำดับตามที่พี่ให้มา: รูป 4 รูป -> รูปเดี่ยว -> ข้อความ 1,2,3
+    await markWelcomed(senderId);
     await sendAllImages(senderId);
     await sendMessage(senderId, MSG1);
     await sendMessage(senderId, MSG2);
