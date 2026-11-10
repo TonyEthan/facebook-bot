@@ -4,71 +4,45 @@ app.use(express.json());
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 10000;
 
 const processedMids = new Set();
-const userState = new Map();
+const welcomedUsers = new Map();
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
 ผ้านิ่มใส่สบาย สีไม่ตก 
-
 ▶ มีกระเป๋า 2 ข้างใส่ของได้จริง
 ▶ อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว
 ▶ ความยาว 42 นิ้ว 
 
 2 ชุด 69×2=138 +ค่าส่ง 50.-
 4 ชุด 69×4=276.- ส่งฟรี💥
-10 ชุด 69×10=690.-ส่งฟรี💥(ขายดี)
+10 ชุด 69×10=690.-ส่งฟรี💥💥
+ปลายทางไม่บวกเพิ่ม✅
 
-ปลายทางไม่บวกเพิ่ม ❗❗
 ด่วน❗❗สินค้ามีจำนวนจำกัด`;
 
 const MSG2 = `คละรวมกันได้นะจ้ะ❤❤
 ▶ ชุดกระโจมอก 60.-
 ▶ ชุดเดสคอกลม 89.-
-
 4 ชุดขึ้นไปส่งฟรี ✅💥`;
 
 const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
-const SHOP_INFO = `
-คุณคือแอดมินเพจ "เรื่องเล่าเตือนใจ" ตอบสุภาพมาก ใช้คำลงท้าย ค่ะ / นะคะ / จ้ะ เป็นกันเองเหมือนพี่สาวใจดี
-ลูกค้าเพิ่งได้รับรูป + ข้อความต้อนรับไปแล้ว ตอนนี้คือการคุยต่อ
-สินค้าหลัก: ชุดนอนแขนระบาย ผ้านิ่มใส่สบาย สีไม่ตก มีกระเป๋า 2 ข้าง ใส่ของได้จริง อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ความยาว 42 นิ้ว
-ราคาชุดนอนแขนระบาย ชุดละ 69 บาท
-- 2 ชุด = 138 + ค่าส่ง 50 = 188 บาท
-- 4 ชุด = 276 บาท ส่งฟรี
-- 10 ชุด = 690 บาท ส่งฟรี (ขายดี)
-สินค้าอื่น คละรวมกันได้:
-- ชุดกระโจมอก ชุดละ 60 บาท
-- ชุดเดรสคอกลม ชุดละ 89 บาท
-- คละกันครบ 4 ชุดขึ้นไป ส่งฟรี
-เก็บเงินปลายทางได้ ไม่บวกเพิ่ม สินค้ามีจำนวนจำกัด
-ถ้าถามสี/ลาย ให้ตอบว่ามีหลายลายให้เลือก เดี๋ยวส่งรูปให้ดู อย่าแต่งสีเอง
-ถ้าลูกค้าจะสั่ง ให้ถาม รับกี่ชุด, แบบไหน, ชื่อ, เบอร์โทร, ที่อยู่จัดส่ง ทีละอย่าง อย่าถามรวดเดียว
-ถ้าไม่รู้ ให้ตอบว่า ขอเช็คกับแอดมินแป๊บนะคะ
-ห้ามลดราคาเอง ห้ามแต่งโปรเอง
-ตอบสั้น กระชับ เป็นกันเอง
-`;
+const BASE_URL = 'https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/';
 
-function makeImageList(prefix, count) {
-  const list = [];
-  for (let i = 1; i <= count; i++) {
-    list.push(`https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/${prefix}${i}.jpg`);
-  }
-  return list;
-}
-const IMAGES_CHUDNON = makeImageList('chudnon', 17);
-const IMAGES_DRESS = makeImageList('dress', 23);
-const IMAGES_DRESSMIX = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/dressmix.jpg'];
-const IMAGES_KRAJOM = ['https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/krajom1.jpg'];
-const IMAGES_REVIEW = makeImageList('review', 4);
+// ===== รหัสใหม่ 45 รูป ส่งทีละ 4 รูป เรียงตามที่พี่ให้มา =====
+const CODES_BATCH4 = [
+  'a09','a11','a29','a77','a79','a83','a85','a87','a90','a97',
+  'a105','a107','a109','a111','a113','a115','a117','a119',
+  'b01','b03','b05','b07','b09','b11','b13','b15','b17','b19','b21','b23',
+  'd25','d35','d47','d53','d55','d59','d67','d73','d77','d81','d85','d87','d89','d91','d93'
+];
+const GROUP_BATCH4 = CODES_BATCH4.map(code => `${BASE_URL}${code}.jpg`);
 
-// กลุ่มที่ 1: chudnon1 ถึง dress23 = 40 รูป ส่งทีละ 4 รูปพร้อมกัน
-const GROUP_BATCH4 = [...IMAGES_CHUDNON, ...IMAGES_DRESS];
-// กลุ่มที่ 2: ส่งทีละรูป
-const GROUP_SINGLE = [...IMAGES_DRESSMIX, ...IMAGES_KRAJOM, ...IMAGES_REVIEW];
+// ===== รูปเดิม 6 รูป ส่งทีละรูป =====
+const CODES_SINGLE = ['dressmix','krajom1','review1','review2','review3','review4'];
+const GROUP_SINGLE = CODES_SINGLE.map(code => `${BASE_URL}${code}.jpg`);
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -98,7 +72,7 @@ async function sendImage(senderId, imageUrl) {
   } catch (e) { console.log("SendImage error:", e.message); return null; }
 }
 
-// ส่งทีละ 4 รูปพร้อมกัน - ใช้ Promise.all จะได้ขึ้นเป็นกลุ่ม 4 รูป
+// ส่งทีละ 4 รูปพร้อมกัน
 async function sendImagesBatch4(senderId, images) {
   for (let i = 0; i < images.length; i += 4) {
     const batch = images.slice(i, i + 4);
@@ -118,24 +92,6 @@ async function sendImagesSingle(senderId, images) {
 async function sendAllImages(senderId) {
   await sendImagesBatch4(senderId, GROUP_BATCH4);
   await sendImagesSingle(senderId, GROUP_SINGLE);
-}
-
-async function getAIReply(userMsg) {
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: SHOP_INFO + "\nลูกค้าพิมพ์ว่า: " + userMsg + "\nตอบลูกค้า:" }] }],
-        generationConfig: { temperature: 0.7 }
-      })
-    });
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (text) return text;
-    console.log("Gemini no text:", JSON.stringify(data));
-    return null;
-  } catch (e) { console.log("Gemini error:", e.message); return null; }
 }
 
 app.get('/', (req, res) => res.send('Bot ทำงานอยู่ครับ'));
@@ -167,40 +123,35 @@ async function handleEvent(event) {
   if (!senderId) return;
   if (event.message?.is_echo) return;
   const msg = event.message?.text?.trim() || '';
+  const hasAttachment = !!event.message?.attachments?.length;
   const mid = event.message?.mid;
   if (mid) {
     if (processedMids.has(mid)) return;
     processedMids.add(mid);
     if (processedMids.size > 500) processedMids.clear();
   }
-  if (!msg) return;
-  console.log("Received:", msg);
+  if (!msg && !hasAttachment) return;
+  console.log("Received:", msg || "[ส่งรูปมา]");
 
   try {
     const now = Date.now();
-    const last = userState.get(senderId);
-    const isFirst = !last || (now - last.lastTime > 60 * 60 * 1000);
+    const last = welcomedUsers.get(senderId);
 
-    if (isFirst) {
-      userState.set(senderId, { lastTime: now });
-      // ลำดับตามที่ต้องการ: รูปก่อน แล้วข้อความ 1,2,3
-      await sendAllImages(senderId);
-      await sendMessage(senderId, MSG1);
-      await sendMessage(senderId, MSG2);
-      await sendMessage(senderId, MSG3);
+    // นับจากแชทสุดท้ายของลูกค้า ถ้ายังไม่เกิน 1 ชม. = ไม่ส่งซ้ำ ให้แอดมินตอบเอง
+    if (last && (now - last < 60 * 60 * 1000)) {
+      welcomedUsers.set(senderId, now);
+      console.log("Already welcomed, skip - let admin reply");
       return;
     }
 
-    userState.set(senderId, { lastTime: now });
-    const lower = msg.toLowerCase();
-    if (lower.includes('รูป') || lower.includes('ดู') || lower.includes('ลาย') || lower.includes('สี')) {
-      await sendAllImages(senderId);
-    }
-    let reply = await getAIReply(msg);
-    if (!reply) {
-      reply = "รับกี่ชุดดีจ้ะ😘 บอกแอดมินได้เลยนะคะ ชื่อ เบอร์โทร ที่อยู่จัดส่ง เดี๋ยวแอดมินเช็คให้ค่ะ";
-    }
-    await sendMessage(senderId, reply);
+    welcomedUsers.set(senderId, now);
+    // ลำดับตามที่พี่ให้มา: รูป 4 รูป -> รูปเดี่ยว -> ข้อความ 1,2,3
+    await sendAllImages(senderId);
+    await sendMessage(senderId, MSG1);
+    await sendMessage(senderId, MSG2);
+    await sendMessage(senderId, MSG3);
+    console.log("Welcome sent, waiting for admin");
+
   } catch (e) {
     console.log("handleEvent error:", e.message);
   }
