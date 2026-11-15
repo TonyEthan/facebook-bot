@@ -1,6 +1,6 @@
-const express = require('express');
-const app = express();
-app.use(express.json());
+const 【entity-express¦canonical_name=express】 = require('【entity-express¦canonical_name=express】');
+const app = 【entity-express¦canonical_name=express】();
+app.use(【entity-express¦canonical_name=express】.json());
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
@@ -50,13 +50,13 @@ async function callGemini(model, prompt) {
     const data = await res.json();
     if (data.error) {
       console.log(`Gemini error (${model}):`, JSON.stringify(data.error));
-      return null;
+      return { errorCode: data.error.code };
     }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return text || null;
+    return { text: text || null };
   } catch (e) {
     console.log(`Gemini fetch error (${model}):`, e.message);
-    return null;
+    return { errorCode: 0 };
   } finally {
     clearTimeout(timeout);
   }
@@ -85,11 +85,24 @@ async function askGemini(userMessage) {
 ลูกค้าถามว่า: ${userMessage}
 
 ตอบเป็นภาษาไทยสุภาพ:`;
-  let reply = await callGemini('gemini-3.8-flash', prompt);
-  if (reply) return reply;
-  console.log("Fallback to gemini-flash-latest");
-  reply = await callGemini('gemini-flash-latest', prompt);
-  return reply;
+  const models = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.log(`Trying ${model} attempt ${attempt}/3`);
+      const result = await callGemini(model, prompt);
+      if (result.text) return result.text;
+      if (result.errorCode === 503 || result.errorCode === 0) {
+        if (attempt < 3) {
+          console.log(`Model ${model} busy, wait 10s then retry...`);
+          await new Promise(r => setTimeout(r, 10000));
+          continue;
+        }
+      } else {
+        break;
+      }
+    }
+  }
+  return null;
 }
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
