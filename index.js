@@ -35,21 +35,31 @@ async function markWelcomed(senderId) {
 }
 
 async function callGemini(model, prompt) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-    })
-  });
-  const data = await res.json();
-  if (data.error) {
-    console.log(`Gemini error (${model}):`, JSON.stringify(data.error));
-    return { error: data.error };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+      }),
+      signal: controller.signal
+    });
+    const data = await res.json();
+    if (data.error) {
+      console.log(`Gemini error (${model}):`, JSON.stringify(data.error));
+      return null;
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    return text || null;
+  } catch (e) {
+    console.log(`Gemini fetch error (${model}):`, e.message);
+    return null;
+  } finally {
+    clearTimeout(timeout);
   }
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  return { text: text || null };
 }
 
 async function askGemini(userMessage) {
@@ -75,25 +85,11 @@ async function askGemini(userMessage) {
 ลูกค้าถามว่า: ${userMessage}
 
 ตอบเป็นภาษาไทยสุภาพ:`;
-  const models = ['gemini-flash-latest', 'gemini-2.5-flash'];
-  for (const model of models) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const result = await callGemini(model, prompt);
-        if (result.text) return result.text;
-        if (result.error?.code === 503 || result.error?.status === 'UNAVAILABLE') {
-          console.log(`Model ${model} busy, retry ${attempt}/2...`);
-          await new Promise(r => setTimeout(r, 2000));
-          continue;
-        }
-        break;
-      } catch (e) {
-        console.log("Gemini fetch error:", e.message);
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-  }
-  return null;
+  let reply = await callGemini('gemini-3.8-flash', prompt);
+  if (reply) return reply;
+  console.log("Fallback to gemini-flash-latest");
+  reply = await callGemini('gemini-flash-latest', prompt);
+  return reply;
 }
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
