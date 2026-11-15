@@ -6,6 +6,7 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
 const PORT = process.env.PORT || 10000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -34,37 +35,17 @@ async function markWelcomed(senderId) {
   } catch (e) { console.log("Upstash set error:", e.message); }
 }
 
-async function callGemini(model, prompt) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-      }),
-      signal: controller.signal
-    });
-    const data = await res.json();
-    if (data.error) {
-      console.log(`Gemini error (${model}):`, JSON.stringify(data.error));
-      return { errorCode: data.error.code };
-    }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return { text: text || null };
-  } catch (e) {
-    console.log(`Gemini fetch error (${model}):`, e.message);
-    return { errorCode: 0 };
-  } finally {
-    clearTimeout(timeout);
-  }
+function getRuleReply(msg) {
+  const t = msg.toLowerCase();
+  if (t.includes('เอา 10') || t.includes('10 ชุด')) return `รับ 10 ชุดนะจ้ะคุณพี่ 😘 690.- ส่งฟรีจ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
+  if (t.includes('เอา 4') || t.includes('4 ชุด')) return `รับ 4 ชุดนะจ้ะคุณพี่ 😘 276.- ส่งฟรีจ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
+  if (t.includes('เอา 2') || t.includes('2 ชุด')) return `รับ 2 ชุดนะจ้ะคุณพี่ 😘 138 +ค่าส่ง 50 = 188.- จ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
+  if (t.includes('ราคา') || t.includes('กี่บาท') || t.includes('เท่าไหร่')) return `ราคาจ้ะคุณพี่ 😘\nชุดนอนแขนระบาย 69.-\n2 ชุด 188.- รวมส่ง\n4 ชุด 276.- ส่งฟรี\n10 ชุด 690.- ส่งฟรี\nชุดกระโจมอก 60.- ชุดเดรสคอกลม 89.- คละกันได้ ครบ 4 ชุดส่งฟรีจ้ะ`;
+  return null;
 }
 
-async function askGemini(userMessage) {
-  if (!GEMINI_API_KEY) { console.log("No GEMINI_API_KEY"); return null; }
-  const prompt = `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพมาก ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ, มีอีโมจิเล็กน้อย 😘
+function buildPrompt(userMessage) {
+  return `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพมาก ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ, มีอีโมจิเล็กน้อย 😘
 
 ข้อมูลสินค้าที่ต้องรู้ (ห้ามแต่งราคาเอง ห้ามแต่งโปรเอง):
 - ชุดนอนแขนระบาย 69.- : 2 ชุด 69x2=138 +ค่าส่ง 50 = 188, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี, ปลายทางไม่บวกเพิ่ม
@@ -85,15 +66,53 @@ async function askGemini(userMessage) {
 ลูกค้าถามว่า: ${userMessage}
 
 ตอบเป็นภาษาไทยสุภาพ:`;
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    console.log(`Trying gemini-flash-latest attempt ${attempt}/5`);
-    const result = await callGemini('gemini-flash-latest', prompt);
-    if (result.text) return result.text;
-    if (attempt < 5) {
-      console.log(`Model busy, wait 10s then retry...`);
-      await new Promise(r => setTimeout(r, 10000));
-    }
-  }
+}
+
+async function askGroq(userMessage) {
+  if (!GROQ_API_KEY) { console.log("No GROQ_API_KEY"); return null; }
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: buildPrompt(userMessage) }],
+        temperature: 0.7,
+        max_tokens: 500
+      })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("Groq error:", JSON.stringify(data.error)); return null; }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    return text || null;
+  } catch (e) { console.log("Groq fetch error:", e.message); return null; }
+}
+
+async function askGemini(userMessage) {
+  if (!GEMINI_API_KEY) return null;
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: buildPrompt(userMessage) }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+      })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("Gemini error:", JSON.stringify(data.error)); return null; }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    return text || null;
+  } catch (e) { console.log("Gemini fetch error:", e.message); return null; }
+}
+
+async function askAI(userMessage) {
+  console.log("Trying Groq AI...");
+  let reply = await askGroq(userMessage);
+  if (reply) { console.log("Groq answered"); return reply; }
+  console.log("Groq failed, try Gemini...");
+  reply = await askGemini(userMessage);
+  if (reply) { console.log("Gemini answered"); return reply; }
   return null;
 }
 
@@ -197,9 +216,13 @@ async function handleEvent(event) {
     if (already) {
       await markWelcomed(senderId);
       if (msg) {
-        const aiReply = await askGemini(msg);
+        const aiReply = await askAI(msg);
         if (aiReply) { await sendMessage(senderId, aiReply); }
-        else { await sendMessage(senderId, "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘"); }
+        else {
+          const ruleReply = getRuleReply(msg);
+          if (ruleReply) { await sendMessage(senderId, ruleReply); }
+          else { await sendMessage(senderId, "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘"); }
+        }
       } else if (hasAttachment) {
         await sendMessage(senderId, "รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ😘");
       }
