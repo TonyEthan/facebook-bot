@@ -88,14 +88,19 @@ async function askGroq(userMessage) {
   } catch (e) { console.log("Groq fetch error:", e.message); return null; }
 }
 
-async function askGroqVision(imageUrls, caption) {
-  if (!GROQ_API_KEY) return null;
+async function urlToBase64(url) {
   try {
-    const content = [
-      { type: 'text', text: `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพ ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ มีอีโมจิเล็กน้อย 😘
+    let res = await fetch(url, { headers: { Authorization: `Bearer ${PAGE_ACCESS_TOKEN}` } });
+    if (!res.ok) res = await fetch(url);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    return `data:${contentType};base64,${buf.toString('base64')}`;
+  } catch (e) { console.log("download image error:", e.message); return url; }
+}
 
-ลูกค้าส่งรูปมา ${imageUrls.length} รูป และพิมพ์ว่า: "${caption || 'ไม่มีข้อความ'}"
-
+function buildVisionPrompt(caption, count) {
+  return `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพ ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ มีอีโมจิเล็กน้อย 😘
+ลูกค้าส่งรูปมา ${count} รูป และพิมพ์ว่า: "${caption || 'ไม่มีข้อความ'}"
 ให้ดูรูปแล้วบอกว่าเห็นชุดแบบไหน สีอะไร ลายอะไร แล้วบอกเราคาให้:
 - ถ้าเป็นชุดนอนแขนระบาย 69.- : 2 ชุด 188.- รวมส่ง, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี
 - ถ้าเป็นชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
@@ -103,26 +108,55 @@ async function askGroqVision(imageUrls, caption) {
 - อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ยาว 42 นิ้ว ผ้านิ่ม สีไม่ตก มีกระเป๋า 2 ข้าง
 - ถามลูกค้าว่ารับกี่ชุดดี แล้วให้แจ้งชื่อ ที่อยู่ เบอร์โทร
 - ตอบสั้นๆ ไม่เกิน 5 บรรทัด อย่าพูดว่าเป็น AI ถ้าดูรูปไม่ออกให้บอกว่า รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ
-ตอบเป็นภาษาไทยสุภาพ:` }
-    ];
-    for (const url of imageUrls.slice(0, 4)) {
-      content.push({ type: 'image_url', image_url: { url: url } });
+ตอบเป็นภาษาไทยสุภาพ:`;
+}
+
+async function askGeminiVision(base64Images, caption) {
+  if (!GEMINI_API_KEY) return null;
+  try {
+    const parts = [{ text: buildVisionPrompt(caption, base64Images.length) }];
+    for (const dataUrl of base64Images) {
+      const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
+      if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
     }
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-        messages: [{ role: 'user', content: content }],
-        temperature: 0.7,
-        max_tokens: 500
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 500 } })
     });
     const data = await res.json();
-    if (data.error) { console.log("Groq Vision error:", JSON.stringify(data.error)); return null; }
-    const text = data.choices?.[0]?.message?.content?.trim();
-    return text || null;
-  } catch (e) { console.log("Groq Vision fetch error:", e.message); return null; }
+    if (data.error) { console.log("Gemini Vision error:", JSON.stringify(data.error)); return null; }
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  } catch (e) { console.log("Gemini Vision fetch error:", e.message); return null; }
+}
+
+async function askGroqVision(imageUrls, caption) {
+  if (!GROQ_API_KEY && !GEMINI_API_KEY) return null;
+  const base64Images = [];
+  for (const u of imageUrls.slice(0, 4)) {
+    const b64 = await urlToBase64(u);
+    base64Images.push(b64);
+  }
+  const models = ['meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.2-11b-vision-preview'];
+  for (const model of models) {
+    if (!GROQ_API_KEY) break;
+    try {
+      console.log("Trying Groq Vision model:", model);
+      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
+      });
+      const data = await res.json();
+      if (data.error) { console.log("Groq Vision error:", model, JSON.stringify(data.error)); continue; }
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) { console.log("Groq Vision answered with:", model); return text; }
+    } catch (e) { console.log("Groq Vision fetch error:", model, e.message); continue; }
+  }
+  console.log("Groq Vision all failed, try Gemini Vision...");
+  return await askGeminiVision(base64Images, caption);
 }
 
 async function askGemini(userMessage) {
