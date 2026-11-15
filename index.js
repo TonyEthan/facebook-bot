@@ -7,6 +7,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
 const PORT = process.env.PORT || 10000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -69,7 +70,7 @@ function buildPrompt(userMessage) {
 }
 
 async function askGroq(userMessage) {
-  if (!GROQ_API_KEY) { console.log("No GROQ_API_KEY"); return null; }
+  if (!GROQ_API_KEY) return null;
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -83,8 +84,7 @@ async function askGroq(userMessage) {
     });
     const data = await res.json();
     if (data.error) { console.log("Groq error:", JSON.stringify(data.error)); return null; }
-    const text = data.choices?.[0]?.message?.content?.trim();
-    return text || null;
+    return data.choices?.[0]?.message?.content?.trim() || null;
   } catch (e) { console.log("Groq fetch error:", e.message); return null; }
 }
 
@@ -111,49 +111,65 @@ function buildVisionPrompt(caption, count) {
 ตอบเป็นภาษาไทยสุภาพ:`;
 }
 
-async function askVision(imageUrls, caption) {
+async function askGeminiVision(base64Images, caption) {
   if (!GEMINI_API_KEY) return null;
+  try {
+    console.log("Trying Gemini Vision: gemini-3.8-flash");
+    const parts = [{ text: buildVisionPrompt(caption, base64Images.length) }];
+    for (const dataUrl of base64Images) {
+      const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
+      if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+    }
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 500 } })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("Gemini Vision error:", JSON.stringify(data.error)); return null; }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (text) { console.log("Gemini Vision answered"); return text; }
+  } catch (e) { console.log("Gemini Vision fetch error:", e.message); }
+  return null;
+}
+
+async function askOpenRouterVision(base64Images, caption) {
+  if (!OPENROUTER_API_KEY) { console.log("No OPENROUTER_API_KEY, skip"); return null; }
+  try {
+    console.log("Trying OpenRouter Vision: llama-4-scout:free");
+    const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+    for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
+      body: JSON.stringify({ model: 'meta-llama/llama-4-scout:free', messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("OpenRouter Vision error:", JSON.stringify(data.error)); return null; }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (text) { console.log("OpenRouter Vision answered"); return text; }
+  } catch (e) { console.log("OpenRouter Vision fetch error:", e.message); }
+  return null;
+}
+
+async function askVision(imageUrls, caption) {
   const base64Images = [];
   for (const u of imageUrls.slice(0, 4)) {
     const b64 = await urlToBase64(u);
     base64Images.push(b64);
   }
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
-  for (const model of models) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`Trying Gemini Vision: ${model} attempt ${attempt}`);
-        const parts = [{ text: buildVisionPrompt(caption, base64Images.length) }];
-        for (const dataUrl of base64Images) {
-          const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
-          if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
-        }
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 500 } })
-        });
-        const data = await res.json();
-        if (data.error) {
-          console.log(`Gemini Vision error ${model}:`, JSON.stringify(data.error));
-          if (data.error.code === 503 || data.error.status === 'UNAVAILABLE') {
-            await new Promise(r => setTimeout(r, 2000));
-            continue;
-          }
-          break;
-        }
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (text) { console.log("Gemini Vision answered with:", model); return text; }
-      } catch (e) { console.log("Gemini Vision fetch error:", e.message); await new Promise(r => setTimeout(r, 2000)); }
-    }
-  }
+  let reply = await askGeminiVision(base64Images, caption);
+  if (reply) return reply;
+  console.log("Gemini Vision failed (quota/full), try OpenRouter...");
+  reply = await askOpenRouterVision(base64Images, caption);
+  if (reply) return reply;
   return null;
 }
 
 async function askGemini(userMessage) {
   if (!GEMINI_API_KEY) return null;
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -163,18 +179,15 @@ async function askGemini(userMessage) {
     });
     const data = await res.json();
     if (data.error) { console.log("Gemini error:", JSON.stringify(data.error)); return null; }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return text || null;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
   } catch (e) { console.log("Gemini fetch error:", e.message); return null; }
 }
 
 async function askAI(userMessage) {
-  console.log("Trying Groq AI...");
   let reply = await askGroq(userMessage);
-  if (reply) { console.log("Groq answered"); return reply; }
-  console.log("Groq failed, try Gemini...");
+  if (reply) return reply;
   reply = await askGemini(userMessage);
-  if (reply) { console.log("Gemini answered"); return reply; }
+  if (reply) return reply;
   return null;
 }
 
