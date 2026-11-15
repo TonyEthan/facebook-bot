@@ -36,7 +36,7 @@ async function markWelcomed(senderId) {
 
 async function callGemini(model, prompt) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
@@ -85,21 +85,13 @@ async function askGemini(userMessage) {
 ลูกค้าถามว่า: ${userMessage}
 
 ตอบเป็นภาษาไทยสุภาพ:`;
-  const models = ['gemini-3.8-flash', 'gemini-flash-latest'];
-  for (const model of models) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      console.log(`Trying ${model} attempt ${attempt}/3`);
-      const result = await callGemini(model, prompt);
-      if (result.text) return result.text;
-      if (result.errorCode === 503 || result.errorCode === 0) {
-        if (attempt < 3) {
-          console.log(`Model ${model} busy, wait 10s then retry...`);
-          await new Promise(r => setTimeout(r, 10000));
-          continue;
-        }
-      } else {
-        break;
-      }
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    console.log(`Trying gemini-flash-latest attempt ${attempt}/5`);
+    const result = await callGemini('gemini-flash-latest', prompt);
+    if (result.text) return result.text;
+    if (attempt < 5) {
+      console.log(`Model busy, wait 10s then retry...`);
+      await new Promise(r => setTimeout(r, 10000));
     }
   }
   return null;
