@@ -36,7 +36,7 @@ async function markWelcomed(senderId) {
 
 async function callGemini(model, prompt) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 60000);
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
