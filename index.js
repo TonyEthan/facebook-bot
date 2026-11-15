@@ -6,6 +6,8 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
 const PORT = process.env.PORT || 10000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY2 = process.env.GEMINI_API_KEY2;
+const GEMINI_API_KEY3 = process.env.GEMINI_API_KEY3;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
@@ -111,53 +113,42 @@ function buildVisionPrompt(caption, count) {
 ตอบเป็นภาษาไทยสุภาพ:`;
 }
 
-async function askGeminiVision(base64Images, caption) {
-  if (!GEMINI_API_KEY) return null;
+async function askGeminiVisionOneKey(base64Images, caption, apiKey, label) {
   try {
-    console.log("Trying Gemini Vision: gemini-3.8-flash");
+    console.log(`Trying Gemini Vision: gemini-3.8-flash ${label}`);
     const parts = [{ text: buildVisionPrompt(caption, base64Images.length) }];
     for (const dataUrl of base64Images) {
       const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
       if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
     }
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 500 } })
     });
     const data = await res.json();
-    if (data.error) { console.log("Gemini Vision error:", JSON.stringify(data.error)); return null; }
+    if (data.error) { console.log(`Gemini Vision error ${label}:`, JSON.stringify(data.error).slice(0, 300)); return null; }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (text) { console.log("Gemini Vision answered"); return text; }
+    if (text) { console.log("Gemini Vision answered", label); return text; }
   } catch (e) { console.log("Gemini Vision fetch error:", e.message); }
   return null;
 }
 
-async function askOpenRouterVision(base64Images, caption) {
-  if (!OPENROUTER_API_KEY) { console.log("No OPENROUTER_API_KEY, skip"); return null; }
-  const models = [
-    'google/gemma-3-27b-it:free',
-    'google/gemma-3-4b-it:free',
-    'qwen/qwen2.5-vl-72b-instruct:free',
-    'meta-llama/llama-3.2-11b-vision-instruct:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free'
-  ];
-  for (const model of models) {
-    try {
-      console.log("Trying OpenRouter Vision:", model);
-      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
-      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
-      });
-      const data = await res.json();
-      if (data.error) { console.log("OpenRouter Vision error:", model, JSON.stringify(data.error)); continue; }
-      const text = data.choices?.[0]?.message?.content?.trim();
-      if (text) { console.log("OpenRouter Vision answered with:", model); return text; }
-    } catch (e) { console.log("OpenRouter Vision fetch error:", model, e.message); continue; }
-  }
+async function askPollinationsVision(base64Images, caption) {
+  try {
+    console.log("Trying Pollinations Vision: openai (free, no key)");
+    const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+    for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+    const res = await fetch('https://text.pollinations.ai/openai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'openai', messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("Pollinations Vision error:", JSON.stringify(data.error).slice(0, 500)); return null; }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (text) { console.log("Pollinations Vision answered"); return text; }
+  } catch (e) { console.log("Pollinations Vision fetch error:", e.message); }
   return null;
 }
 
@@ -167,29 +158,40 @@ async function askVision(imageUrls, caption) {
     const b64 = await urlToBase64(u);
     base64Images.push(b64);
   }
-  let reply = await askGeminiVision(base64Images, caption);
-  if (reply) return reply;
-  console.log("Gemini Vision failed (quota/full), try OpenRouter...");
-  reply = await askOpenRouterVision(base64Images, caption);
+  const geminiKeys = [
+    { key: GEMINI_API_KEY, label: 'key1' },
+    { key: GEMINI_API_KEY2, label: 'key2' },
+    { key: GEMINI_API_KEY3, label: 'key3' }
+  ].filter(x => x.key);
+  for (const { key, label } of geminiKeys) {
+    const reply = await askGeminiVisionOneKey(base64Images, caption, key, label);
+    if (reply) return reply;
+  }
+  console.log("Gemini Vision all keys failed (quota), try Pollinations free...");
+  const reply = await askPollinationsVision(base64Images, caption);
   if (reply) return reply;
   return null;
 }
 
 async function askGemini(userMessage) {
-  if (!GEMINI_API_KEY) return null;
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(userMessage) }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-      })
-    });
-    const data = await res.json();
-    if (data.error) { console.log("Gemini error:", JSON.stringify(data.error)); return null; }
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-  } catch (e) { console.log("Gemini fetch error:", e.message); return null; }
+  const keys = [GEMINI_API_KEY, GEMINI_API_KEY2, GEMINI_API_KEY3].filter(Boolean);
+  for (const apiKey of keys) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: buildPrompt(userMessage) }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+        })
+      });
+      const data = await res.json();
+      if (data.error) { console.log("Gemini error:", JSON.stringify(data.error).slice(0, 300)); continue; }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (text) return text;
+    } catch (e) { console.log("Gemini fetch error:", e.message); continue; }
+  }
+  return null;
 }
 
 async function askAI(userMessage) {
