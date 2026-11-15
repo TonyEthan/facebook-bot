@@ -81,7 +81,7 @@ async function askGroq(userMessage) {
         model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: buildPrompt(userMessage) }],
         temperature: 0.7,
-        max_tokens: 500
+        max_tokens: 1000
       })
     });
     const data = await res.json();
@@ -103,14 +103,21 @@ async function urlToBase64(url) {
 function buildVisionPrompt(caption, count) {
   return `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพ ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ มีอีโมจิเล็กน้อย 😘
 ลูกค้าส่งรูปมา ${count} รูป และพิมพ์ว่า: "${caption || 'ไม่มีข้อความ'}"
-ให้ดูรูปแล้วบอกว่าเห็นชุดแบบไหน สีอะไร ลายอะไร แล้วบอกเราคาให้:
-- ถ้าเป็นชุดนอนแขนระบาย 69.- : 2 ชุด 188.- รวมส่ง, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี
-- ถ้าเป็นชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
+
+ให้ดูรูปแล้วตอบให้จบประโยค ห้ามตอบค้าง ห้ามตัดคำกลางคำ ห้ามหยุดที่คำว่า ลายน / สี / แบบ ต้องตอบให้ครบถึงราคา
+
+ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัดเท่านั้น:
+บรรทัดที่ 1: สวัสดีจ้ะคุณพี่ รูปที่ส่งมาเป็น [ชื่อชุด] [สี] [ลาย] จ้ะ
+บรรทัดที่ 2: ราคา [ราคา] จ้ะ 4 ชุด 276.- ส่งฟรี ปลายทางไม่บวกเพิ่มจ้ะ
+บรรทัดที่ 3: คุณพี่รับกี่ชุดดีจ้ะ แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ
+
+ข้อมูลราคา:
+- ชุดนอนแขนระบาย 69.- : 2 ชุด 188.- รวมส่ง, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี
+- ชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
 - คละกันได้ ครบ 4 ชุดส่งฟรี ปลายทางไม่บวกเพิ่ม
 - อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ยาว 42 นิ้ว ผ้านิ่ม สีไม่ตก มีกระเป๋า 2 ข้าง
-- ถามลูกค้าว่ารับกี่ชุดดี แล้วให้แจ้งชื่อ ที่อยู่ เบอร์โทร
-- ตอบสั้นๆ ไม่เกิน 5 บรรทัด อย่าพูดว่าเป็น AI ถ้าดูรูปไม่ออกให้บอกว่า รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ
-ตอบเป็นภาษาไทยสุภาพ:`;
+- อย่าพูดว่าเป็น AI ถ้าดูรูปไม่ออกให้บอกว่า รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ
+ตอบเป็นภาษาไทยสุภาพ และต้องจบประโยคด้วยคำว่า จ้ะ:`;
 }
 
 async function askGeminiVisionOneKey(base64Images, caption, apiKey, label) {
@@ -124,31 +131,61 @@ async function askGeminiVisionOneKey(base64Images, caption, apiKey, label) {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 500 } })
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 1000 } })
     });
     const data = await res.json();
     if (data.error) { console.log(`Gemini Vision error ${label}:`, JSON.stringify(data.error).slice(0, 300)); return null; }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (text) { console.log("Gemini Vision answered", label); return text; }
+    if (text) { console.log("Gemini Vision answered", label, "text:", text.slice(0, 200)); return text; }
   } catch (e) { console.log("Gemini Vision fetch error:", e.message); }
   return null;
 }
 
 async function askPollinationsVision(base64Images, caption) {
-  try {
-    console.log("Trying Pollinations Vision: openai (free, no key)");
-    const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
-    for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
-    const res = await fetch('https://text.pollinations.ai/openai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'openai', messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
-    });
-    const data = await res.json();
-    if (data.error) { console.log("Pollinations Vision error:", JSON.stringify(data.error).slice(0, 500)); return null; }
-    const text = data.choices?.[0]?.message?.content?.trim();
-    if (text) { console.log("Pollinations Vision answered"); return text; }
-  } catch (e) { console.log("Pollinations Vision fetch error:", e.message); }
+  const models = ['openai-large', 'qwen', 'gemini', 'mistral', 'llama'];
+  for (const model of models) {
+    try {
+      console.log("Trying Pollinations Vision:", model);
+      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+      const res = await fetch('https://text.pollinations.ai/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 1000 })
+      });
+      const data = await res.json();
+      if (data.error) { console.log("Pollinations Vision error:", model, JSON.stringify(data.error).slice(0, 400)); continue; }
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) { console.log("Pollinations Vision answered with:", model); return text; }
+    } catch (e) { console.log("Pollinations Vision fetch error:", model, e.message); continue; }
+  }
+  return null;
+}
+
+async function askOpenRouterVision(base64Images, caption) {
+  if (!OPENROUTER_API_KEY) return null;
+  const models = [
+    'google/gemma-3-27b-it',
+    'meta-llama/llama-4-scout',
+    'qwen/qwen2.5-vl-72b-instruct',
+    'mistralai/mistral-small-3.1-24b-instruct'
+  ];
+  for (const model of models) {
+    try {
+      console.log("Trying OpenRouter Vision:", model);
+      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 1000 })
+      });
+      const data = await res.json();
+      if (data.error) { console.log("OpenRouter Vision error:", model, JSON.stringify(data.error).slice(0, 400)); continue; }
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) { console.log("OpenRouter Vision answered with:", model); return text; }
+    } catch (e) { console.log("OpenRouter Vision fetch error:", model, e.message); continue; }
+  }
   return null;
 }
 
@@ -167,8 +204,11 @@ async function askVision(imageUrls, caption) {
     const reply = await askGeminiVisionOneKey(base64Images, caption, key, label);
     if (reply) return reply;
   }
-  console.log("Gemini Vision all keys failed (quota), try Pollinations free...");
-  const reply = await askPollinationsVision(base64Images, caption);
+  console.log("Gemini Vision all keys failed, try Pollinations...");
+  let reply = await askPollinationsVision(base64Images, caption);
+  if (reply) return reply;
+  console.log("Pollinations failed, try OpenRouter...");
+  reply = await askOpenRouterVision(base64Images, caption);
   if (reply) return reply;
   return null;
 }
@@ -182,7 +222,7 @@ async function askGemini(userMessage) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: buildPrompt(userMessage) }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
         })
       });
       const data = await res.json();
