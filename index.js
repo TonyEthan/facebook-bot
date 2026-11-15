@@ -34,12 +34,8 @@ async function markWelcomed(senderId) {
   } catch (e) { console.log("Upstash set error:", e.message); }
 }
 
-// ===== AI ตอบคำถามต่อ =====
 async function askGemini(userMessage) {
-  if (!GEMINI_API_KEY) {
-    console.log("No GEMINI_API_KEY");
-    return null;
-  }
+  if (!GEMINI_API_KEY) { console.log("No GEMINI_API_KEY"); return null; }
   try {
     const prompt = `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพมาก ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ, มีอีโมจิเล็กน้อย 😘
 
@@ -62,7 +58,7 @@ async function askGemini(userMessage) {
 ลูกค้าถามว่า: ${userMessage}
 
 ตอบเป็นภาษาไทยสุภาพ:`;
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -71,16 +67,10 @@ async function askGemini(userMessage) {
       })
     });
     const data = await res.json();
-    if (data.error) {
-      console.log("Gemini error:", JSON.stringify(data.error));
-      return null;
-    }
+    if (data.error) { console.log("Gemini error:", JSON.stringify(data.error)); return null; }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     return text || null;
-  } catch (e) {
-    console.log("Gemini fetch error:", e.message);
-    return null;
-  }
+  } catch (e) { console.log("Gemini fetch error:", e.message); return null; }
 }
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
@@ -104,8 +94,6 @@ const MSG2 = `คละรวมกันได้นะจ้ะ❤❤
 const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
 const BASE_URL = 'https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/';
-
-// 44 รูป ส่งทีละ 4 รูป - ลบ a77 ออกแล้ว (ตอนนี้ 50 รูปทั้งหมด ถ้าจะเอา a77 กลับบอกผมนะครับ)
 const CODES_BATCH4 = [
   'a09','a11','a29','a79','a83','a85','a87','a90','a97',
   'a105','a107','a109','a111','a113','a115','a117','a119',
@@ -184,21 +172,16 @@ async function handleEvent(event) {
     const already = await hasWelcomed(senderId);
     if (already) {
       await markWelcomed(senderId);
-      // ทักครั้งที่ 2 ขึ้นไป -> ให้ AI ตอบแทนที่จะเงียบ
       if (msg) {
         const aiReply = await askGemini(msg);
-        if (aiReply) {
-          await sendMessage(senderId, aiReply);
-        } else {
-          await sendMessage(senderId, "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘");
-        }
+        if (aiReply) { await sendMessage(senderId, aiReply); }
+        else { await sendMessage(senderId, "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘"); }
       } else if (hasAttachment) {
         await sendMessage(senderId, "รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ😘");
       }
       console.log("AI replied to follow-up");
       return;
     }
-
     await markWelcomed(senderId);
     await sendAllImages(senderId);
     await sendMessage(senderId, MSG1);
