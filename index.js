@@ -1,6 +1,6 @@
-const 【entity-express¦canonical_name=express】 = require('【entity-express¦canonical_name=express】');
-const app = 【entity-express¦canonical_name=express】();
-app.use(【entity-express¦canonical_name=express】.json());
+const express = require('express');
+const app = express();
+app.use(express.json());
 
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
