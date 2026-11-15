@@ -88,6 +88,43 @@ async function askGroq(userMessage) {
   } catch (e) { console.log("Groq fetch error:", e.message); return null; }
 }
 
+async function askGroqVision(imageUrls, caption) {
+  if (!GROQ_API_KEY) return null;
+  try {
+    const content = [
+      { type: 'text', text: `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพ ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ มีอีโมจิเล็กน้อย 😘
+
+ลูกค้าส่งรูปมา ${imageUrls.length} รูป และพิมพ์ว่า: "${caption || 'ไม่มีข้อความ'}"
+
+ให้ดูรูปแล้วบอกว่าเห็นชุดแบบไหน สีอะไร ลายอะไร แล้วบอกเราคาให้:
+- ถ้าเป็นชุดนอนแขนระบาย 69.- : 2 ชุด 188.- รวมส่ง, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี
+- ถ้าเป็นชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
+- คละกันได้ ครบ 4 ชุดส่งฟรี ปลายทางไม่บวกเพิ่ม
+- อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ยาว 42 นิ้ว ผ้านิ่ม สีไม่ตก มีกระเป๋า 2 ข้าง
+- ถามลูกค้าว่ารับกี่ชุดดี แล้วให้แจ้งชื่อ ที่อยู่ เบอร์โทร
+- ตอบสั้นๆ ไม่เกิน 5 บรรทัด อย่าพูดว่าเป็น AI ถ้าดูรูปไม่ออกให้บอกว่า รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ
+ตอบเป็นภาษาไทยสุภาพ:` }
+    ];
+    for (const url of imageUrls.slice(0, 4)) {
+      content.push({ type: 'image_url', image_url: { url: url } });
+    }
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'user', content: content }],
+        temperature: 0.7,
+        max_tokens: 500
+      })
+    });
+    const data = await res.json();
+    if (data.error) { console.log("Groq Vision error:", JSON.stringify(data.error)); return null; }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    return text || null;
+  } catch (e) { console.log("Groq Vision fetch error:", e.message); return null; }
+}
+
 async function askGemini(userMessage) {
   if (!GEMINI_API_KEY) return null;
   try {
@@ -206,15 +243,28 @@ async function handleEvent(event) {
   if (!senderId) return;
   if (event.message?.is_echo) return;
   const msg = event.message?.text?.trim() || '';
-  const hasAttachment = !!event.message?.attachments?.length;
+  const attachments = event.message?.attachments || [];
+  const imageUrls = attachments.filter(a => a.type === 'image').map(a => a.payload?.url).filter(Boolean);
+  const hasAttachment = attachments.length > 0;
   const mid = event.message?.mid;
   if (mid) { if (processedMids.has(mid)) return; processedMids.add(mid); if (processedMids.size > 500) processedMids.clear(); }
   if (!msg && !hasAttachment) return;
-  console.log("Received:", msg || "[ส่งรูปมา]");
+  console.log("Received:", msg || "[ส่งรูปมา]", imageUrls.length ? `images:${imageUrls.length}` : "");
   try {
     const already = await hasWelcomed(senderId);
     if (already) {
       await markWelcomed(senderId);
+      if (imageUrls.length > 0) {
+        const visionReply = await askGroqVision(imageUrls, msg);
+        if (visionReply) { await sendMessage(senderId, visionReply); }
+        else { await sendMessage(senderId, "รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ😘"); }
+        if (msg) {
+          const aiReply = await askAI(msg);
+          if (aiReply) await sendMessage(senderId, aiReply);
+        }
+        console.log("Vision replied");
+        return;
+      }
       if (msg) {
         const aiReply = await askAI(msg);
         if (aiReply) { await sendMessage(senderId, aiReply); }
