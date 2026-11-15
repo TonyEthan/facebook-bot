@@ -135,20 +135,29 @@ async function askGeminiVision(base64Images, caption) {
 
 async function askOpenRouterVision(base64Images, caption) {
   if (!OPENROUTER_API_KEY) { console.log("No OPENROUTER_API_KEY, skip"); return null; }
-  try {
-    console.log("Trying OpenRouter Vision: llama-4-scout:free");
-    const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
-    for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
-      body: JSON.stringify({ model: 'meta-llama/llama-4-scout:free', messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
-    });
-    const data = await res.json();
-    if (data.error) { console.log("OpenRouter Vision error:", JSON.stringify(data.error)); return null; }
-    const text = data.choices?.[0]?.message?.content?.trim();
-    if (text) { console.log("OpenRouter Vision answered"); return text; }
-  } catch (e) { console.log("OpenRouter Vision fetch error:", e.message); }
+  const models = [
+    'google/gemma-3-27b-it:free',
+    'google/gemma-3-4b-it:free',
+    'qwen/qwen2.5-vl-72b-instruct:free',
+    'meta-llama/llama-3.2-11b-vision-instruct:free',
+    'mistralai/mistral-small-3.1-24b-instruct:free'
+  ];
+  for (const model of models) {
+    try {
+      console.log("Trying OpenRouter Vision:", model);
+      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
+      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 500 })
+      });
+      const data = await res.json();
+      if (data.error) { console.log("OpenRouter Vision error:", model, JSON.stringify(data.error)); continue; }
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text) { console.log("OpenRouter Vision answered with:", model); return text; }
+    } catch (e) { console.log("OpenRouter Vision fetch error:", model, e.message); continue; }
+  }
   return null;
 }
 
