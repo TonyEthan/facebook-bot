@@ -61,7 +61,7 @@ const CODES_BATCH4 = [
   'a09','a11','a29','a79','a83','a85','a87','a90','a97',
   'a105','a107','a109','a111','a113','a115','a117','a119',
   'b01','b03','b05','b07','b09','b11','b13','b15','b17','b19','b21','b23',
-  'd25','d35','d47','d53','d55','d59','d67','d73','d77','d81','d85','d87','d89','d91','d93'
+  'd25','d35','d41','d47','d53','d55','d59','d67','d73','d77','d81','d85','d87','d89','d93'
 ];
 const GROUP_BATCH4 = CODES_BATCH4.map(code => `${BASE_URL}${code}.jpg`);
 const CODES_SINGLE = ['dressmix','krajom1','review1','review2','review3','review4'];
@@ -136,12 +136,10 @@ async function handleEvent(event) {
   try {
     const already = await hasWelcomed(senderId);
     if (already) {
-      // จำไว้ 48 ชม. ภายใน 48 ชม. ไม่ส่งรูปซ้ำ ไม่ตอบ AI รอแอดมินมาตอบเอง
       await markWelcomed(senderId);
       console.log("Already welcomed within 48h, skip sending images");
       return;
     }
-    // ลูกค้าใหม่ หรือ ครบ 48 ชม. แล้ว ส่งรูปเหมือนเดิม
     await markWelcomed(senderId);
     await sendAllImages(senderId);
     await sendMessage(senderId, MSG1);
