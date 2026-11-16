@@ -5,17 +5,15 @@ app.use(express.json());
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'MyBotToken2024';
 const PORT = process.env.PORT || 10000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_KEY2 = process.env.GEMINI_API_KEY2;
-const GEMINI_API_KEY3 = process.env.GEMINI_API_KEY3;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 const processedMids = new Set();
 const welcomedUsers = new Map();
+
+// 48 ชม. = 48 * 60 * 60 = 172800 วินาที
+const MEMORY_SECONDS = 172800;
 
 async function hasWelcomed(senderId) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return welcomedUsers.has(senderId);
@@ -32,214 +30,10 @@ async function markWelcomed(senderId) {
   welcomedUsers.set(senderId, Date.now());
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
   try {
-    await fetch(`${UPSTASH_URL}/set/welcomed:${senderId}/1/EX/3600`, {
+    await fetch(`${UPSTASH_URL}/set/welcomed:${senderId}/1/EX/${MEMORY_SECONDS}`, {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
     });
   } catch (e) { console.log("Upstash set error:", e.message); }
-}
-
-function getRuleReply(msg) {
-  const t = msg.toLowerCase();
-  if (t.includes('เอา 10') || t.includes('10 ชุด')) return `รับ 10 ชุดนะจ้ะคุณพี่ 😘 690.- ส่งฟรีจ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
-  if (t.includes('เอา 4') || t.includes('4 ชุด')) return `รับ 4 ชุดนะจ้ะคุณพี่ 😘 276.- ส่งฟรีจ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
-  if (t.includes('เอา 2') || t.includes('2 ชุด')) return `รับ 2 ชุดนะจ้ะคุณพี่ 😘 138 +ค่าส่ง 50 = 188.- จ้ะ ปลายทางไม่บวกเพิ่มจ้ะ\nคุณพี่แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ เดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ`;
-  if (t.includes('ราคา') || t.includes('กี่บาท') || t.includes('เท่าไหร่')) return `ราคาจ้ะคุณพี่ 😘\nชุดนอนแขนระบาย 69.-\n2 ชุด 188.- รวมส่ง\n4 ชุด 276.- ส่งฟรี\n10 ชุด 690.- ส่งฟรี\nชุดกระโจมอก 60.- ชุดเดรสคอกลม 89.- คละกันได้ ครบ 4 ชุดส่งฟรีจ้ะ`;
-  return null;
-}
-
-function buildPrompt(userMessage) {
-  return `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพมาก ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ, มีอีโมจิเล็กน้อย 😘
-
-ข้อมูลสินค้าที่ต้องรู้ (ห้ามแต่งราคาเอง ห้ามแต่งโปรเอง):
-- ชุดนอนแขนระบาย 69.- : 2 ชุด 69x2=138 +ค่าส่ง 50 = 188, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี, ปลายทางไม่บวกเพิ่ม
-- ชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
-- คละรวมกันได้ ครบ 4 ชุดขึ้นไปส่งฟรี
-- อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว, ความยาว 42 นิ้ว, ผ้านิ่มใส่สบาย สีไม่ตก, มีกระเป๋า 2 ข้างใส่ของได้จริง
-- สินค้ามีจำนวนจำกัด
-- สี: มีหลายสีตามรูปเลย ให้ลูกค้าเลือกจากรูปได้ คละสีได้ ถ้าลูกค้าถามสีไหนมีไหม ให้บอกว่า สีตามรูปเลยจ้ะ คุณพี่ชอบสีไหนแคปมาให้แอดมินดูได้เลยจ้ะ อย่าแต่งว่ามีสีอะไรบ้างถ้าไม่รู้
-- การจัดส่ง: แอดมินจัดส่งให้เร็วที่สุด 1-2 วันทำการ
-- การสั่ง: ถามลูกค้าว่ารับกี่ชุดดี แล้วให้ลูกค้าแจ้งชื่อ ที่อยู่ เบอร์โทร แล้วบอกว่าเดี๋ยวแอดมินคอนเฟิร์มออเดอร์ให้จ้ะ
-
-กฎ:
-- ตอบสั้นๆ กระชับ ไม่เกิน 5 บรรทัด ไม่ต้องส่งรูปซ้ำ ไม่ต้องส่งข้อความโปรโมชั่นซ้ำ
-- ถ้าลูกค้าถามนอกเรื่องสินค้า หรือไม่แน่ใจ ให้ตอบว่า "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘"
-- อย่าพูดว่าเป็น AI
-- อย่าบอกว่าระบบขัดข้อง
-
-ลูกค้าถามว่า: ${userMessage}
-
-ตอบเป็นภาษาไทยสุภาพ:`;
-}
-
-async function askGroq(userMessage) {
-  if (!GROQ_API_KEY) return null;
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: buildPrompt(userMessage) }],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-    const data = await res.json();
-    if (data.error) { console.log("Groq error:", JSON.stringify(data.error)); return null; }
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  } catch (e) { console.log("Groq fetch error:", e.message); return null; }
-}
-
-async function urlToBase64(url) {
-  try {
-    let res = await fetch(url, { headers: { Authorization: `Bearer ${PAGE_ACCESS_TOKEN}` } });
-    if (!res.ok) res = await fetch(url);
-    const buf = Buffer.from(await res.arrayBuffer());
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-    return `data:${contentType};base64,${buf.toString('base64')}`;
-  } catch (e) { console.log("download image error:", e.message); return url; }
-}
-
-function buildVisionPrompt(caption, count) {
-  return `คุณเป็นแอดมินร้านชุดนอน เพจเรื่องเล่าเตือนใจ / อารมณ์ดี Shop ตอบสุภาพ ใช้คำว่า คุณพี่, จ้ะ, นะจ้ะ มีอีโมจิเล็กน้อย 😘
-ลูกค้าส่งรูปมา ${count} รูป และพิมพ์ว่า: "${caption || 'ไม่มีข้อความ'}"
-
-ให้ดูรูปแล้วตอบให้จบประโยค ห้ามตอบค้าง ห้ามตัดคำกลางคำ ห้ามหยุดที่คำว่า ลายน / สี / แบบ ต้องตอบให้ครบถึงราคา
-
-ตอบตามรูปแบบนี้เป๊ะๆ 3 บรรทัดเท่านั้น:
-บรรทัดที่ 1: สวัสดีจ้ะคุณพี่ รูปที่ส่งมาเป็น [ชื่อชุด] [สี] [ลาย] จ้ะ
-บรรทัดที่ 2: ราคา [ราคา] จ้ะ 4 ชุด 276.- ส่งฟรี ปลายทางไม่บวกเพิ่มจ้ะ
-บรรทัดที่ 3: คุณพี่รับกี่ชุดดีจ้ะ แจ้งชื่อ ที่อยู่ เบอร์โทรให้แอดมินหน่อยนะจ้ะ
-
-ข้อมูลราคา:
-- ชุดนอนแขนระบาย 69.- : 2 ชุด 188.- รวมส่ง, 4 ชุด 276.- ส่งฟรี, 10 ชุด 690.- ส่งฟรี
-- ชุดกระโจมอก 60.-, ชุดเดรสคอกลม 89.-
-- คละกันได้ ครบ 4 ชุดส่งฟรี ปลายทางไม่บวกเพิ่ม
-- อกฟรีไซส์ 34 ยืดได้ถึง 52 นิ้ว ยาว 42 นิ้ว ผ้านิ่ม สีไม่ตก มีกระเป๋า 2 ข้าง
-- อย่าพูดว่าเป็น AI ถ้าดูรูปไม่ออกให้บอกว่า รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ
-ตอบเป็นภาษาไทยสุภาพ และต้องจบประโยคด้วยคำว่า จ้ะ:`;
-}
-
-async function askGeminiVisionOneKey(base64Images, caption, apiKey, label) {
-  try {
-    console.log(`Trying Gemini Vision: gemini-3.8-flash ${label}`);
-    const parts = [{ text: buildVisionPrompt(caption, base64Images.length) }];
-    for (const dataUrl of base64Images) {
-      const m = dataUrl.match(/^data:(.*?);base64,(.*)$/);
-      if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
-    }
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.7, maxOutputTokens: 1000 } })
-    });
-    const data = await res.json();
-    if (data.error) { console.log(`Gemini Vision error ${label}:`, JSON.stringify(data.error).slice(0, 300)); return null; }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (text) { console.log("Gemini Vision answered", label, "text:", text.slice(0, 200)); return text; }
-  } catch (e) { console.log("Gemini Vision fetch error:", e.message); }
-  return null;
-}
-
-async function askPollinationsVision(base64Images, caption) {
-  const models = ['openai-large', 'qwen', 'gemini', 'mistral', 'llama'];
-  for (const model of models) {
-    try {
-      console.log("Trying Pollinations Vision:", model);
-      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
-      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
-      const res = await fetch('https://text.pollinations.ai/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 1000 })
-      });
-      const data = await res.json();
-      if (data.error) { console.log("Pollinations Vision error:", model, JSON.stringify(data.error).slice(0, 400)); continue; }
-      const text = data.choices?.[0]?.message?.content?.trim();
-      if (text) { console.log("Pollinations Vision answered with:", model); return text; }
-    } catch (e) { console.log("Pollinations Vision fetch error:", model, e.message); continue; }
-  }
-  return null;
-}
-
-async function askOpenRouterVision(base64Images, caption) {
-  if (!OPENROUTER_API_KEY) return null;
-  const models = [
-    'google/gemma-3-27b-it',
-    'meta-llama/llama-4-scout',
-    'qwen/qwen2.5-vl-72b-instruct',
-    'mistralai/mistral-small-3.1-24b-instruct'
-  ];
-  for (const model of models) {
-    try {
-      console.log("Trying OpenRouter Vision:", model);
-      const content = [{ type: 'text', text: buildVisionPrompt(caption, base64Images.length) }];
-      for (const b64 of base64Images) content.push({ type: 'image_url', image_url: { url: b64 } });
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'HTTP-Referer': 'https://facebook-bot-mhvd.onrender.com', 'X-Title': 'facebook-bot' },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content }], temperature: 0.7, max_tokens: 1000 })
-      });
-      const data = await res.json();
-      if (data.error) { console.log("OpenRouter Vision error:", model, JSON.stringify(data.error).slice(0, 400)); continue; }
-      const text = data.choices?.[0]?.message?.content?.trim();
-      if (text) { console.log("OpenRouter Vision answered with:", model); return text; }
-    } catch (e) { console.log("OpenRouter Vision fetch error:", model, e.message); continue; }
-  }
-  return null;
-}
-
-async function askVision(imageUrls, caption) {
-  const base64Images = [];
-  for (const u of imageUrls.slice(0, 4)) {
-    const b64 = await urlToBase64(u);
-    base64Images.push(b64);
-  }
-  const geminiKeys = [
-    { key: GEMINI_API_KEY, label: 'key1' },
-    { key: GEMINI_API_KEY2, label: 'key2' },
-    { key: GEMINI_API_KEY3, label: 'key3' }
-  ].filter(x => x.key);
-  for (const { key, label } of geminiKeys) {
-    const reply = await askGeminiVisionOneKey(base64Images, caption, key, label);
-    if (reply) return reply;
-  }
-  console.log("Gemini Vision all keys failed, try Pollinations...");
-  let reply = await askPollinationsVision(base64Images, caption);
-  if (reply) return reply;
-  console.log("Pollinations failed, try OpenRouter...");
-  reply = await askOpenRouterVision(base64Images, caption);
-  if (reply) return reply;
-  return null;
-}
-
-async function askGemini(userMessage) {
-  const keys = [GEMINI_API_KEY, GEMINI_API_KEY2, GEMINI_API_KEY3].filter(Boolean);
-  for (const apiKey of keys) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(userMessage) }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
-        })
-      });
-      const data = await res.json();
-      if (data.error) { console.log("Gemini error:", JSON.stringify(data.error).slice(0, 300)); continue; }
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (text) return text;
-    } catch (e) { console.log("Gemini fetch error:", e.message); continue; }
-  }
-  return null;
-}
-
-async function askAI(userMessage) {
-  let reply = await askGroq(userMessage);
-  if (reply) return reply;
-  reply = await askGemini(userMessage);
-  if (reply) return reply;
-  return null;
 }
 
 const MSG1 = `ชุดนอนแขนระบาย ✅
@@ -342,38 +136,18 @@ async function handleEvent(event) {
   try {
     const already = await hasWelcomed(senderId);
     if (already) {
+      // จำไว้ 48 ชม. ภายใน 48 ชม. ไม่ส่งรูปซ้ำ ไม่ตอบ AI รอแอดมินมาตอบเอง
       await markWelcomed(senderId);
-      if (imageUrls.length > 0) {
-        const visionReply = await askVision(imageUrls, msg);
-        if (visionReply) { await sendMessage(senderId, visionReply); }
-        else { await sendMessage(senderId, "รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ😘"); }
-        if (msg) {
-          const aiReply = await askAI(msg);
-          if (aiReply) await sendMessage(senderId, aiReply);
-        }
-        console.log("Vision replied");
-        return;
-      }
-      if (msg) {
-        const aiReply = await askAI(msg);
-        if (aiReply) { await sendMessage(senderId, aiReply); }
-        else {
-          const ruleReply = getRuleReply(msg);
-          if (ruleReply) { await sendMessage(senderId, ruleReply); }
-          else { await sendMessage(senderId, "รับทราบจ้ะคุณพี่ เดี๋ยวแอดมินมาตอบนะจ้ะ😘"); }
-        }
-      } else if (hasAttachment) {
-        await sendMessage(senderId, "รับรูปแล้วจ้ะคุณพี่ เดี๋ยวแอดมินมาดูให้นะจ้ะ😘");
-      }
-      console.log("AI replied to follow-up");
+      console.log("Already welcomed within 48h, skip sending images");
       return;
     }
+    // ลูกค้าใหม่ หรือ ครบ 48 ชม. แล้ว ส่งรูปเหมือนเดิม
     await markWelcomed(senderId);
     await sendAllImages(senderId);
     await sendMessage(senderId, MSG1);
     await sendMessage(senderId, MSG2);
     await sendMessage(senderId, MSG3);
-    console.log("Welcome sent, waiting for admin");
+    console.log("Welcome images sent, 48h memory");
   } catch (e) { console.log("handleEvent error:", e.message); }
 }
 app.listen(PORT, () => console.log(`Bot running on port ${PORT}`));
