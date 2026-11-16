@@ -57,12 +57,19 @@ const MSG2 = `คละรวมกันได้นะจ้ะ❤❤
 const MSG3 = `คุณพี่รับกี่ชุดดีจ้ะ😘`;
 
 const BASE_URL = 'https://raw.githubusercontent.com/TonyEthan/facebook-bot/main/';
-const CODES_BATCH4 = [
-  'a09','a11','a29','a79','a83','a85','a87','a90','a97',
-  'a105','a107','a109','a111','a113','a115','a117','a119',
-  'b01','b03','b05','b07','b09','b11','b13','b15','b17','b19','b21','b23',
+// เรียงส่ง a หมดก่อน แล้วค่อย b แล้วค่อย d
+const CODES_A = [
+  'a01','a03','a09','a11','a17','a19','a21','a29','a38','a49','a54',
+  'a79','a83','a85','a87','a90','a93','a97','a99',
+  'a105','a107','a109','a111','a113','a115','a117','a119'
+];
+const CODES_B = [
+  'b01','b03','b05','b07','b09','b11','b13','b15','b17','b19','b21','b23'
+];
+const CODES_D = [
   'd25','d35','d41','d47','d53','d55','d59','d67','d73','d77','d81','d85','d87','d89','d93'
 ];
+const CODES_BATCH4 = [...CODES_A, ...CODES_B, ...CODES_D];
 const GROUP_BATCH4 = CODES_BATCH4.map(code => `${BASE_URL}${code}.jpg`);
 const CODES_SINGLE = ['dressmix','krajom1','review1','review2','review3','review4'];
 const GROUP_SINGLE = CODES_SINGLE.map(code => `${BASE_URL}${code}.jpg`);
