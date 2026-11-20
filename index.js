@@ -12,8 +12,8 @@ const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const processedMids = new Set();
 const welcomedUsers = new Map();
 
-// 48 ชม. = 48 * 60 * 60 = 172800 วินาที
-const MEMORY_SECONDS = 172800;
+// 72 ชม. = 72 * 60 * 60 = 259200 วินาที
+const MEMORY_SECONDS = 259200;
 
 async function hasWelcomed(senderId) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return welcomedUsers.has(senderId);
@@ -67,7 +67,7 @@ const CODES_B = [
   'b01','b03','b05','b07','b09','b11','b13','b15','b17','b19','b21','b23'
 ];
 const CODES_D = [
-  'd25','d35','d41','d47','d53','d55','d59','d67','d73','d77','d81','d85','d87','d89','d93'
+  'd01','d13','d25','d35','d41','d47','d53','d55','d59','d67','d71','d73','d77','d81','d85','d87','d89','d93'
 ];
 const CODES_BATCH4 = [...CODES_A, ...CODES_B, ...CODES_D];
 const GROUP_BATCH4 = CODES_BATCH4.map(code => `${BASE_URL}${code}.jpg`);
@@ -144,7 +144,7 @@ async function handleEvent(event) {
     const already = await hasWelcomed(senderId);
     if (already) {
       await markWelcomed(senderId);
-      console.log("Already welcomed within 48h, skip sending images");
+      console.log("Already welcomed within 72h, skip sending images");
       return;
     }
     await markWelcomed(senderId);
@@ -152,7 +152,7 @@ async function handleEvent(event) {
     await sendMessage(senderId, MSG1);
     await sendMessage(senderId, MSG2);
     await sendMessage(senderId, MSG3);
-    console.log("Welcome images sent, 48h memory");
+    console.log("Welcome images sent, 72h memory");
   } catch (e) { console.log("handleEvent error:", e.message); }
 }
 app.listen(PORT, () => console.log(`Bot running on port ${PORT}`));
