@@ -67,7 +67,7 @@ const CODES_B = [
   'b01','b03','b05','b07','b09','b11','b13','b17','b21','b23'
 ];
 const CODES_D = [
-  'd01','d13','d21','d23','d25','d29','d31','d33','d35','d37','d41','d47','d53','d55','d57','d59','d67','d71','d73','d77','d81','d85','d87','d89','d93'
+  'd01','d13','d21','d23','d25','d29','d31','d33','d35','d37','d53','d55','d57','d59','d67','d71','d73','d77','d85','d87','d89'
 ];
 const CODES_BATCH4 = [...CODES_A, ...CODES_B, ...CODES_D];
 const GROUP_BATCH4 = CODES_BATCH4.map(code => `${BASE_URL}${code}.jpg`);
